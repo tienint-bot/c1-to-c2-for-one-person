@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>五線譜音感挑戰 (單人計時 60 秒)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body {
+      font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+    }
+    .shake-anim {
+      animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+    }
+    @keyframes shake {
+      10%, 90% { transform: translate3d(-3px, 0, 0); }
+      20%, 80% { transform: translate3d(5px, 0, 0); }
+      30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+      40%, 60% { transform: translate3d(6px, 0, 0); }
+    }
+    .pop-anim {
+      animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+    }
+    @keyframes pop {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.04); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .bounce-bubble {
+      animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+    }
+    @keyframes bounceIn {
+      0% { transform: scale(0.65) translateY(20px); opacity: 0; }
+      60% { transform: scale(1.05) translateY(-5px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .solfege-btn {
+      white-space: nowrap !important;
+      word-break: keep-all !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .solfege-btn-re {
+      font-size: clamp(0.9rem, 2.5vw, 1.35rem) !important;
+      letter-spacing: -0.04em;
+    }
+    .pulse-danger {
+      animation: pulseAlert 0.8s infinite;
+    }
+    @keyframes pulseAlert {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0)); }
+      50% { transform: scale(1.06); filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.8)); }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden">
+
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 sm:px-6 py-2.5 flex items-center justify-between z-30 shadow-md">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-900/40">
+        🎼
+      </div>
+      <div>
+        <h1 class="font-black text-lg sm:text-xl tracking-wide bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
+          五線譜音感挑戰
+        </h1>
+        <p class="text-xs text-slate-400">範圍：$c^1 \sim c^2$（單人限時 60 秒・共 10 題）</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- Audio Mute Toggle -->
+      <button id="audio-btn" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm active:scale-95 transition-all text-slate-300 border border-slate-700">
+        🔊
+      </button>
+
+      <!-- Restart Game Button -->
+      <button id="restart-top-btn" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 text-xs sm:text-sm active:scale-95 transition-all font-bold border border-slate-700">
+        🔄 重新開始
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 max-w-4xl mx-auto w-full relative">
+    
+    <!-- DASHBOARD PANEL: TIMER, QUESTION PROGRESS, SCORE -->
+    <div class="w-full bg-slate-900/80 border border-slate-800 rounded-3xl p-3.5 sm:p-5 shadow-2xl mb-3 sm:mb-5">
+      <div class="grid grid-cols-3 items-center gap-2">
+        
+        <!-- Left: Question Progress -->
+        <div class="flex flex-col items-start">
+          <span class="text-xs text-slate-400 font-semibold mb-1">題目進度</span>
+          <div class="flex items-baseline gap-1">
+            <span id="current-q-index" class="text-2xl sm:text-3xl font-black text-cyan-400">1</span>
+            <span class="text-slate-500 font-bold text-sm sm:text-base">/ 10</span>
+          </div>
+          <div class="w-full max-w-[120px] bg-slate-800 h-2 rounded-full mt-1.5 overflow-hidden">
+            <div id="progress-bar-fill" class="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full transition-all duration-300" style="width: 10%;"></div>
+          </div>
+        </div>
+
+        <!-- Center: Prominent Countdown Timer -->
+        <div class="flex flex-col items-center justify-center">
+          <span class="text-xs text-slate-400 font-bold tracking-wider mb-0.5">剩餘時間</span>
+          <div id="timer-box" class="px-4 py-1.5 sm:px-6 sm:py-2 rounded-2xl bg-gradient-to-b from-slate-950 to-slate-900 border-2 border-cyan-500/50 shadow-lg flex items-center gap-1.5">
+            <span class="text-base sm:text-xl">⏱️</span>
+            <span id="timer-display" class="font-black text-2xl sm:text-4xl text-amber-300 tracking-wider">60</span>
+            <span class="text-xs text-slate-400 font-bold">秒</span>
+          </div>
+        </div>
+
+        <!-- Right: Current Score -->
+        <div class="flex flex-col items-end">
+          <span class="text-xs text-slate-400 font-semibold mb-1">目前得分</span>
+          <div class="flex items-baseline gap-1">
+            <span id="current-score" class="text-2xl sm:text-3xl font-black text-emerald-400">0</span>
+            <span class="text-slate-400 text-xs sm:text-sm font-bold">分</span>
+          </div>
+          <div class="text-[11px] text-indigo-300 font-semibold mt-1">
+            連勝：<span id="streak-count" class="font-black text-amber-400">0</span> 🔥
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MUSICAL STAFF DISPLAY BOX -->
+    <div id="staff-card" class="w-full flex-1 min-h-[220px] max-h-[340px] bg-gradient-to-b from-slate-900/90 to-slate-950/95 rounded-3xl border-2 border-cyan-500/40 p-3 sm:p-6 flex flex-col items-center justify-center relative shadow-2xl overflow-hidden my-1">
+      
+      <!-- Subtitle guide -->
+      <div class="absolute top-3 left-4 text-xs text-slate-400 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+        <span>仔細辨識音高位置，點擊正確的唱名：</span>
+      </div>
+
+      <!-- Staff SVG Host Container -->
+      <div id="staff-container" class="w-full h-full flex items-center justify-center max-w-xl">
+        <!-- SVG will be dynamically injected here -->
+      </div>
+
+      <!-- Instant Flash Feedback Overlay -->
+      <div id="feedback-banner" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-3xl sm:text-4xl font-black transition-all opacity-0 rounded-3xl backdrop-blur-[2px]"></div>
+
+      <!-- Time's up or ready blocker -->
+      <div id="board-blocker" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center z-10 rounded-3xl">
+        <span class="text-xl font-black text-amber-300">請稍候...</span>
+      </div>
+    </div>
+
+    <!-- SOLFÈGE INPUT BUTTONS (ㄉㄛ ㄖㄨㄝ ㄇㄧ ㄈㄚ ㄙㄛ ㄌㄚ ㄒㄧ) -->
+    <div class="w-full mt-3 sm:mt-5">
+      <div class="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+        <button data-note="ㄉㄛ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄉㄛ
+        </button>
+        <button data-note="ㄖㄨㄝ" class="solfege-btn solfege-btn-re py-3.5 sm:py-5 px-0 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄖㄨㄝ
+        </button>
+        <button data-note="ㄇㄧ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄇㄧ
+        </button>
+        <button data-note="ㄈㄚ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄈㄚ
+        </button>
+        <button data-note="ㄙㄛ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄙㄛ
+        </button>
+        <button data-note="ㄌㄚ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄌㄚ
+        </button>
+        <button data-note="ㄒㄧ" class="solfege-btn py-3.5 sm:py-5 px-1 rounded-2xl font-black text-base sm:text-xl md:text-2xl bg-gradient-to-b from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 active:scale-95 transition-all text-white shadow-lg shadow-cyan-950/60 border-b-4 border-cyan-800">
+          ㄒㄧ
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BIG RESULT MESSAGE BUBBLE MODAL -->
+  <div id="result-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <!-- Huge Pop Bubble Container -->
+    <div class="relative bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-4 border-amber-400/90 rounded-[2.5rem] p-6 sm:p-9 max-w-lg w-full text-center shadow-[0_0_50px_rgba(251,191,36,0.3)] bounce-bubble">
+      
+      <!-- Big Decorative Emoji Badge -->
+      <div id="result-badge" class="w-24 h-24 mx-auto mb-3 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-5xl shadow-xl shadow-amber-900/50">
+        🏆
+      </div>
+
+      <!-- Bubble Reason Title (Finished 10 questions or Time Expired) -->
+      <h2 id="result-title" class="text-2xl sm:text-3xl font-black text-amber-300 mb-1">
+        挑戰完成！
+      </h2>
+      <p id="result-reason" class="text-slate-300 text-sm mb-4 font-medium">
+        已完成全部 10 題測試
+      </p>
+
+      <!-- Giant Score Circle/Card -->
+      <div class="bg-slate-950/80 border-2 border-slate-700/80 rounded-3xl p-5 mb-5 shadow-inner">
+        <span class="text-xs uppercase tracking-widest text-slate-400 font-bold">最終獲得分數</span>
+        <div class="flex items-baseline justify-center gap-1 my-1">
+          <span id="final-score" class="text-5xl sm:text-6xl font-black bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-400 bg-clip-text text-transparent">
+            100
+          </span>
+          <span class="text-xl sm:text-2xl font-black text-slate-400">/ 100 分</span>
+        </div>
+        
+        <!-- Statistics Badges -->
+        <div class="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-800 text-xs">
+          <div class="flex flex-col">
+            <span class="text-slate-400">答對題數</span>
+            <span id="stat-correct" class="font-extrabold text-emerald-400 text-base">10 題</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400">答錯題數</span>
+            <span id="stat-wrong" class="font-extrabold text-rose-400 text-base">0 題</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-slate-400">耗費時間</span>
+            <span id="stat-time" class="font-extrabold text-amber-400 text-base">28 秒</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons inside the bubble -->
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="modal-replay-btn" class="flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-slate-950 font-black text-lg hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-orange-950/50">
+          🎵 再挑戰一次
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME START OVERLAY (To ensure audio context & timer starts properly on click) -->
+  <div id="start-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-40 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-cyan-500/60 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl pop-anim">
+      <div class="text-6xl mb-3">⏱️🎼</div>
+      <h2 class="text-2xl sm:text-3xl font-black text-cyan-300 mb-2">五線譜 60 秒限時大挑戰</h2>
+      <div class="bg-slate-950/70 rounded-2xl p-4 text-xs sm:text-sm text-slate-300 space-y-2 mb-6 border border-slate-800 text-left">
+        <p>🎯 <strong class="text-amber-400">規則：</strong>共 10 題，限時 60 秒倒數計時。</p>
+        <p>🎵 <strong class="text-cyan-400">範圍：</strong>$c^1 \sim c^2$（中央 C 至高音 C）。</p>
+        <p>💡 <strong class="text-emerald-400">計分：</strong>每題答對得 10 分，滿分 100 分！</p>
+        <p>⚠️ 60 秒時間一到或做滿 10 題，將立即結算並展示成績泡泡。</p>
+      </div>
+      <button id="start-game-btn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-black text-lg hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-cyan-950/50">
+        開始測驗！
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Note list from c1 to c2 (Treble Clef C4 to C5)
+    // 5 staff lines:
+    // Line 5 (F5) -> y = 35
+    // Line 4 (D5) -> y = 51
+    // Line 3 (B4) -> y = 67
+    // Line 2 (G4) -> y = 83 (Treble Clef spiral center)
+    // Line 1 (E4) -> y = 99
+    const NOTE_POOL = [
+      { id: 'C4', name: 'c1 (中央 C)', solfege: 'ㄉㄛ', freq: 'C4', step: -2, hasLedgerBelow: true },
+      { id: 'D4', name: 'd1 (下加一間)', solfege: 'ㄖㄨㄝ', freq: 'D4', step: -1, hasLedgerBelow: false },
+      { id: 'E4', name: 'e1 (第一線)', solfege: 'ㄇㄧ', freq: 'E4', step: 0, hasLedgerBelow: false },
+      { id: 'F4', name: 'f1 (第一間)', solfege: 'ㄈㄚ', freq: 'F4', step: 1, hasLedgerBelow: false },
+      { id: 'G4', name: 'g1 (第二線)', solfege: 'ㄙㄛ', freq: 'G4', step: 2, hasLedgerBelow: false },
+      { id: 'A4', name: 'a1 (第二間)', solfege: 'ㄌㄚ', freq: 'A4', step: 3, hasLedgerBelow: false },
+      { id: 'B4', name: 'b1 (第三線)', solfege: 'ㄒㄧ', freq: 'B4', step: 4, hasLedgerBelow: false },
+      { id: 'C5', name: 'c2 (第三間)', solfege: 'ㄉㄛ', freq: 'C5', step: 5, hasLedgerBelow: false }
+    ];
+
+    // State Variables
+    let isMuted = false;
+    let synth = null;
+    let timerInterval = null;
+    let timeLeft = 60;
+    const TOTAL_QUESTIONS = 10;
+    
+    const gameState = {
+      started: false,
+      isFinished: false,
+      currentQuestionIndex: 0, // 0 to 9
+      questions: [],
+      score: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      streak: 0,
+      isWaitingNext: false
+    };
+
+    function initAudio() {
+      if (!synth) {
+        synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: 'triangle8' },
+          envelope: {
+            attack: 0.005,
+            decay: 0.8,
+            sustain: 0.15,
+            release: 1.2
+          }
+        }).toDestination();
+        synth.volume.value = -3;
+      }
+      if (Tone.context.state !== 'running') {
+        Tone.start();
+      }
+    }
+
+    function playTone(pitch) {
+      if (isMuted) return;
+      initAudio();
+      try {
+        synth.triggerAttackRelease(pitch, "8n");
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function playSoundEffect(type) {
+      if (isMuted) return;
+      initAudio();
+      try {
+        if (type === 'correct') {
+          synth.triggerAttackRelease(["C5", "G5"], "16n");
+        } else if (type === 'wrong') {
+          synth.triggerAttackRelease(["C3", "Db3"], "8n");
+        } else if (type === 'win') {
+          synth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n");
+        } else if (type === 'timeout') {
+          synth.triggerAttackRelease(["G3", "Eb3"], "4n");
+        }
+      } catch (e) {}
+    }
+
+    function renderStaffSVG(note) {
+      const width = 420;
+      const height = 150;
+      const lineSpacing = 16;
+      const bottomLineY = 99; // E4 line
+      
+      // Calculate note center Y based on step: step 0 = E4, step 2 = G4, step -2 = C4
+      const noteCenterY = bottomLineY - (note.step * (lineSpacing / 2));
+      const noteCenterX = 270; // Placed nicely to the right of treble clef
+
+      const clefColor = '#38bdf8';
+      const noteColor = '#22d3ee';
+      const staffLineColor = '#64748b';
+
+      let ledgerLineSvg = '';
+      if (note.hasLedgerBelow) {
+        // Ledger line for C4 (at y = 115)
+        const ledgerY = bottomLineY + lineSpacing;
+        ledgerLineSvg = `<line x1="${noteCenterX - 24}" y1="${ledgerY}" x2="${noteCenterX + 24}" y2="${ledgerY}" stroke="#f8fafc" stroke-width="2.6" stroke-linecap="round"/>`;
+      }
+
+      // Stem direction: B4 (step 4) and above stem down on left; below B4 stem up on right
+      let stemSvg = '';
+      if (note.step >= 4) {
+        stemSvg = `<line x1="${noteCenterX - 10}" y1="${noteCenterY}" x2="${noteCenterX - 10}" y2="${noteCenterY + 44}" stroke="#f8fafc" stroke-width="2.6" stroke-linecap="round"/>`;
+      } else {
+        stemSvg = `<line x1="${noteCenterX + 10}" y1="${noteCenterY}" x2="${noteCenterX + 10}" y2="${noteCenterY - 44}" stroke="#f8fafc" stroke-width="2.6" stroke-linecap="round"/>`;
+      }
+
+      /* 
+        Standard Classical G-Clef (Treble Clef):
+        Tuned SVG path with the central spiral precisely encircling the 2nd line G4 (y = 83).
+      */
+      const standardTrebleClefPath = `
+        <g fill="${clefColor}" transform="translate(42, 12) scale(0.88)">
+          <path d="M24.8 62.3 C23.1 59.5 20.2 58.1 16.4 58.1 C11.3 58.1 7.2 62.2 7.2 68.3 C7.2 74.2 11.5 78.9 17.5 78.9 C23.8 78.9 28.7 74.1 28.7 67.8 C28.7 62.4 25.4 58.3 20.6 55.7 L 22.1 46.8 C 24.8 48.3 27.9 49.3 31.2 49.3 C37.1 49.3 41.5 45.1 41.5 39.2 C41.5 33.1 36.8 28.6 30.7 28.6 C26.9 28.6 23.5 30.4 21.4 33.3 L 18.2 13.9 C20.3 11.8 23.4 10.4 26.8 10.4 C31.1 10.4 34.6 12.8 35.8 16.6 C36.2 17.8 37.3 18.5 38.6 18.5 C40.1 18.5 41.3 17.3 41.3 15.8 C41.3 15.1 41.0 14.4 40.5 13.8 C38.3 8.3 32.9 4.6 26.6 4.6 C21.8 4.6 17.4 6.8 14.5 10.4 C12.8 12.5 11.7 15.0 11.2 17.7 L 7.3 41.6 C5.6 43.4 4.3 45.6 3.4 48.1 C2.0 52.0 2.2 56.4 3.9 60.3 C5.8 64.6 9.4 67.8 13.9 69.1 L 12.7 61.6 C10.1 60.5 8.3 57.9 8.3 54.8 C8.3 50.8 11.4 47.4 15.6 47.0 L 19.3 70.3 C14.4 70.8 10.5 74.7 10.5 79.7 C10.5 85.3 15.2 89.8 21.0 89.8 C27.6 89.8 33.0 84.7 33.0 77.8 C33.0 70.9 28.8 65.5 22.8 63.3 L 24.8 62.3 Z M 20.3 38.1 C 21.8 35.8 24.3 34.2 27.2 34.2 C 30.5 34.2 33.1 36.7 33.1 40.1 C 33.1 43.4 30.6 45.9 27.4 45.9 C 24.8 45.9 22.6 44.3 21.5 42.1 L 20.3 38.1 Z M 16.7 73.6 C 13.4 73.6 10.8 70.9 10.8 67.7 C 10.8 64.4 13.4 61.8 16.7 61.8 C 19.1 61.8 21.2 63.2 22.1 65.4 L 16.7 73.6 Z"/>
+          <!-- Bottom hanging drop terminal -->
+          <circle cx="18.5" cy="104.5" r="5.2"/>
+        </g>
+      `;
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" class="w-full h-full select-none" xmlns="http://www.w3.org/2000/svg">
+          <!-- 5 Staff Lines -->
+          <line x1="25" y1="35" x2="${width - 25}" y2="35" stroke="${staffLineColor}" stroke-width="1.8" />
+          <line x1="25" y1="51" x2="${width - 25}" y2="51" stroke="${staffLineColor}" stroke-width="1.8" />
+          <line x1="25" y1="67" x2="${width - 25}" y2="67" stroke="${staffLineColor}" stroke-width="1.8" />
+          <line x1="25" y1="83" x2="${width - 25}" y2="83" stroke="${staffLineColor}" stroke-width="1.8" />
+          <line x1="25" y1="99" x2="${width - 25}" y2="99" stroke="${staffLineColor}" stroke-width="1.8" />
+
+          <!-- Staff Left and Right Bar lines -->
+          <line x1="25" y1="35" x2="25" y2="99" stroke="${staffLineColor}" stroke-width="2.2" />
+          <line x1="${width - 25}" y1="35" x2="${width - 25}" y2="99" stroke="${staffLineColor}" stroke-width="2.2" />
+
+          <!-- Accurate G-Clef -->
+          ${standardTrebleClefPath}
+
+          <!-- Ledger line if needed -->
+          ${ledgerLineSvg}
+
+          <!-- Note Stem -->
+          ${stemSvg}
+
+          <!-- Note Head (Rotated Ellipse) -->
+          <ellipse cx="${noteCenterX}" cy="${noteCenterY}" rx="13.5" ry="9.8" fill="${noteColor}" transform="rotate(-20 ${noteCenterX} ${noteCenterY})" stroke="#ffffff" stroke-width="1.8" class="drop-shadow-lg"/>
+        </svg>
+      `;
+    }
+
+    function generateQuestionList(count) {
+      const list = [];
+      let lastId = null;
+      for (let i = 0; i < count; i++) {
+        const available = NOTE_POOL.filter(n => n.id !== lastId);
+        const selected = available[Math.floor(Math.random() * available.length)];
+        list.push(selected);
+        lastId = selected.id;
+      }
+      return list;
+    }
+
+    function startGame() {
+      initAudio();
+      
+      // Reset state
+      gameState.started = true;
+      gameState.isFinished = false;
+      gameState.currentQuestionIndex = 0;
+      gameState.score = 0;
+      gameState.correctCount = 0;
+      gameState.wrongCount = 0;
+      gameState.streak = 0;
+      gameState.isWaitingNext = false;
+      gameState.questions = generateQuestionList(TOTAL_QUESTIONS);
+
+      timeLeft = 60;
+      updateTimerUI();
+
+      // Clear previous timer if any
+      if (timerInterval) clearInterval(timerInterval);
+
+      // Start countdown timer
+      timerInterval = setInterval(() => {
+        if (!gameState.started || gameState.isFinished) return;
+        timeLeft--;
+        updateTimerUI();
+
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          finishGame("timeout");
+        }
+      }, 1000);
+
+      // Hide modals
+      document.getElementById('start-modal').classList.add('hidden');
+      document.getElementById('result-modal').classList.add('hidden');
+
+      // Update UI & load 1st question
+      updateDashboardUI();
+      loadCurrentQuestion();
+    }
+
+    function updateTimerUI() {
+      const timerDisplay = document.getElementById('timer-display');
+      const timerBox = document.getElementById('timer-box');
+      timerDisplay.textContent = timeLeft;
+
+      if (timeLeft <= 10) {
+        timerDisplay.classList.remove('text-amber-300');
+        timerDisplay.classList.add('text-rose-400');
+        timerBox.classList.add('border-rose-500', 'pulse-danger');
+      } else {
+        timerDisplay.classList.add('text-amber-300');
+        timerDisplay.classList.remove('text-rose-400');
+        timerBox.classList.remove('border-rose-500', 'pulse-danger');
+      }
+    }
+
+    function updateDashboardUI() {
+      // Question index (1-based for humans)
+      const qNum = Math.min(gameState.currentQuestionIndex + 1, TOTAL_QUESTIONS);
+      document.getElementById('current-q-index').textContent = qNum;
+      
+      // Progress bar fill percentage
+      const percent = (qNum / TOTAL_QUESTIONS) * 100;
+      document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+
+      // Score & streak
+      document.getElementById('current-score').textContent = gameState.score;
+      document.getElementById('streak-count').textContent = gameState.streak;
+    }
+
+    function loadCurrentQuestion() {
+      if (gameState.currentQuestionIndex >= TOTAL_QUESTIONS) {
+        finishGame("completed");
+        return;
+      }
+
+      gameState.isWaitingNext = false;
+      const note = gameState.questions[gameState.currentQuestionIndex];
+      const staffContainer = document.getElementById('staff-container');
+
+      staffContainer.innerHTML = renderStaffSVG(note);
+      staffContainer.classList.remove('pop-anim');
+      void staffContainer.offsetWidth; // force css reflow
+      staffContainer.classList.add('pop-anim');
+    }
+
+    function handleUserAnswer(selectedSolf) {
+      if (!gameState.started || gameState.isFinished || gameState.isWaitingNext) return;
+
+      const currentNote = gameState.questions[gameState.currentQuestionIndex];
+      if (!currentNote) return;
+
+      gameState.isWaitingNext = true;
+      const isCorrect = (selectedSolf === currentNote.solfege);
+      const feedbackBanner = document.getElementById('feedback-banner');
+      const staffCard = document.getElementById('staff-card');
+
+      if (isCorrect) {
+        gameState.score += 10;
+        gameState.correctCount++;
+        gameState.streak++;
+        playTone(currentNote.freq);
+
+        showFeedbackBanner(feedbackBanner, `✅ 答對！${currentNote.solfege}`, 'text-emerald-400 bg-emerald-950/85 border-2 border-emerald-500/80');
+      } else {
+        gameState.wrongCount++;
+        gameState.streak = 0;
+        playSoundEffect('wrong');
+
+        showFeedbackBanner(feedbackBanner, `❌ 答錯！正確是「${currentNote.solfege}」`, 'text-rose-400 bg-rose-950/85 border-2 border-rose-500/80');
+
+        staffCard.classList.remove('shake-anim');
+        void staffCard.offsetWidth;
+        staffCard.classList.add('shake-anim');
+        setTimeout(() => staffCard.classList.remove('shake-anim'), 450);
+      }
+
+      updateDashboardUI();
+
+      // Proceed to next question after 0.75s
+      setTimeout(() => {
+        if (!gameState.isFinished) {
+          gameState.currentQuestionIndex++;
+          if (gameState.currentQuestionIndex >= TOTAL_QUESTIONS) {
+            finishGame("completed");
+          } else {
+            loadCurrentQuestion();
+          }
+        }
+      }, 750);
+    }
+
+    function showFeedbackBanner(el, text, classNames) {
+      el.innerHTML = `<span>${text}</span>`;
+      el.className = `absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-2xl sm:text-4xl font-black transition-opacity duration-200 opacity-100 rounded-3xl ${classNames}`;
+      setTimeout(() => {
+        el.className = `absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-2xl sm:text-4xl font-black transition-opacity duration-300 opacity-0 rounded-3xl ${classNames}`;
+      }, 700);
+    }
+
+    function finishGame(reason) {
+      if (gameState.isFinished) return;
+      gameState.isFinished = true;
+      if (timerInterval) clearInterval(timerInterval);
+
+      const timeSpent = 60 - Math.max(0, timeLeft);
+
+      // Modal elements
+      const modal = document.getElementById('result-modal');
+      const badge = document.getElementById('result-badge');
+      const title = document.getElementById('result-title');
+      const reasonEl = document.getElementById('result-reason');
+      const finalScoreEl = document.getElementById('final-score');
+      const statCorrectEl = document.getElementById('stat-correct');
+      const statWrongEl = document.getElementById('stat-wrong');
+      const statTimeEl = document.getElementById('stat-time');
+
+      finalScoreEl.textContent = gameState.score;
+      statCorrectEl.textContent = `${gameState.correctCount} 題`;
+      statWrongEl.textContent = `${gameState.wrongCount} 題`;
+      statTimeEl.textContent = `${timeSpent} 秒`;
+
+      if (reason === "timeout") {
+        badge.innerHTML = "⏰";
+        badge.className = "w-24 h-24 mx-auto mb-3 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center text-5xl shadow-xl shadow-rose-950/60";
+        title.textContent = "時間到！測驗終止";
+        title.className = "text-2xl sm:text-3xl font-black text-rose-400 mb-1";
+        reasonEl.textContent = `已達 60 秒上限（共完成 ${gameState.correctCount + gameState.wrongCount} / 10 題）`;
+        playSoundEffect('timeout');
+      } else {
+        // Completed all 10 questions
+        if (gameState.score >= 80) {
+          badge.innerHTML = "🏆";
+          badge.className = "w-24 h-24 mx-auto mb-3 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 flex items-center justify-center text-5xl shadow-xl shadow-amber-900/60";
+          title.textContent = "🎉 太出色了！滿分音感大師！";
+          title.className = "text-2xl sm:text-3xl font-black text-amber-300 mb-1";
+          playSoundEffect('win');
+
+          if (typeof confetti === 'function') {
+            confetti({
+              particleCount: 150,
+              spread: 80,
+              origin: { y: 0.6 }
+            });
+          }
+        } else {
+          badge.innerHTML = "⭐";
+          badge.className = "w-24 h-24 mx-auto mb-3 rounded-full bg-gradient-to-tr from-sky-400 to-indigo-500 flex items-center justify-center text-5xl shadow-xl shadow-indigo-950/60";
+          title.textContent = "挑戰完成！表現良好！";
+          title.className = "text-2xl sm:text-3xl font-black text-cyan-300 mb-1";
+          playSoundEffect('win');
+        }
+        reasonEl.textContent = `順利完成全部 10 道五線譜音高題目！`;
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Solfege buttons input using pointerdown for 0 latency touch response
+      const buttons = document.querySelectorAll('.solfege-btn');
+      buttons.forEach(btn => {
+        const note = btn.dataset.note;
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          handleUserAnswer(note);
+        });
+      });
+
+      // Start test button
+      document.getElementById('start-game-btn').addEventListener('click', startGame);
+
+      // Replay buttons
+      document.getElementById('modal-replay-btn').addEventListener('click', startGame);
+      document.getElementById('restart-top-btn').addEventListener('click', startGame);
+
+      // Audio mute toggle
+      const audioBtn = document.getElementById('audio-btn');
+      audioBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        audioBtn.textContent = isMuted ? '🔇' : '🔊';
+      });
+
+      // Global click audio context unlock
+      document.body.addEventListener('click', initAudio, { once: true });
+    });
+  </script>
+</body>
+</html>
